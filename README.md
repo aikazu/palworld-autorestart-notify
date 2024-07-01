@@ -1,4 +1,4 @@
-# Palworld Server Restart and Notification Script
+# Automate Palword Server Restart With Discord Notification
 
 This bash script automates periodic restarts of a Palworld dedicated server on `LINUX` and sends Discord notifications about these restarts.
 
