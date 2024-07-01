@@ -1,36 +1,18 @@
 #!/bin/bash
 
 # Default configuration (can be overridden with environment variables)
-START_CMD="${PALWORLD_START_CMD:-./PalServer.sh -publiclobby -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS}"
 DISCORD_WEBHOOK="${DISCORD_WEBHOOK:-}"
 ROLE_ID="${DISCORD_ROLE_ID:-}"
 RESTART_INTERVAL="${RESTART_INTERVAL:-20700}"  # 5 hours and 45 minutes in seconds
 RESTART_WARNING_TIME="${RESTART_WARNING_TIME:-900}"  # 15 minutes in seconds
-
-# Function to start the server
-start_server() {
-    echo "Starting $SERVER_NAME at $(date)"
-    $START_CMD &
-    send_discord_notification "$SERVER_NAME has started!"
-}
-
-# Function to stop the server
-stop_server() {
-    echo "Stopping $SERVER_NAME at $(date)..."
-    send_discord_notification "$SERVER_NAME is stopping for a restart. It will be back soon!"
-    pkill -f PalServer
-    while pgrep -f PalServer > /dev/null; do
-        sleep 1
-    done
-    echo "$SERVER_NAME stopped."
-}
+START_CMD="${PALWORLD_START_CMD:-./PalServer.sh -publiclobby -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS}"
 
 # Function to send Discord notification
 send_discord_notification() {
     if [ -z "$DISCORD_WEBHOOK" ]; then
         echo "Discord notifications are disabled (DISCORD_WEBHOOK is not set)"
         return
-    fi
+    }
     
     local message="$1"
     if [ -n "$ROLE_ID" ]; then
@@ -49,26 +31,45 @@ send_discord_notification() {
     fi
 }
 
-# Trap for graceful shutdown
-trap 'stop_server; exit 0' SIGTERM SIGINT
+# Function to stop the server
+stop_server() {
+    echo "Stopping Palworld server at $(date)..."
+    pkill -f PalServer
+    while pgrep -f PalServer > /dev/null; do
+        sleep 1
+    done
+    echo "Palworld server stopped."
+}
+
+# Function to start the server
+start_server() {
+    echo "Starting Palworld server at $(date)"
+    $START_CMD &
+    send_discord_notification "The Palworld server has been started and is now online!"
+}
+
+# Function to restart the server
+restart_server() {
+    send_discord_notification "The Palworld server is restarting. It will be back soon!"
+    stop_server
+    start_server
+}
+
+# Trap for graceful exit
+trap 'echo "Script terminated."; exit 0' SIGTERM SIGINT
 
 # Main loop
 while true; do
-    start_server
-    
-    # Run for the specified interval
+    # Wait for the restart interval
     sleep $RESTART_INTERVAL &
     wait $!
     
     # Send warning notification before restart
-    send_discord_notification "$SERVER_NAME will restart in $(($RESTART_WARNING_TIME / 60)) minutes!"
+    send_discord_notification "The Palworld server will restart in $(($RESTART_WARNING_TIME / 60)) minutes!"
     
     # Wait for the warning period
     sleep $RESTART_WARNING_TIME &
     wait $!
     
-    stop_server
-    
-    # Wait 30 seconds before restarting
-    sleep 30
+    restart_server
 done
