@@ -15,12 +15,10 @@ send_discord_notification() {
     }
     
     local message="$1"
-    if [ -n "$ROLE_ID" ]; then
-        message="<@&$ROLE_ID> $message"
-    fi
+    [ -n "$ROLE_ID" ] && message="<@&$ROLE_ID> $message"
     
     local response
-    response=$(curl -s -w "\n%{http_code}" -H "Content-Type: application/json" -X POST -d "{\"content\":\"$message\"}" "$DISCORD_WEBHOOK")
+    response=$(curl -s -w "\n%{http_code}" -H "Content-Type: application/json" -X POST -d "{\"content\":\"${message//\"/\\\"}\"}" "$DISCORD_WEBHOOK")
     local body=$(echo "$response" | sed '$d')
     local status_code=$(echo "$response" | tail -n1)
     
@@ -35,9 +33,11 @@ send_discord_notification() {
 stop_server() {
     echo "Stopping Palworld server at $(date)..."
     pkill -f PalServer
-    while pgrep -f PalServer > /dev/null; do
-        sleep 1
-    done
+    timeout 60 bash -c 'while pgrep -f PalServer > /dev/null; do sleep 1; done'
+    if pgrep -f PalServer > /dev/null; then
+        echo "Force stopping Palworld server..."
+        pkill -9 -f PalServer
+    fi
     echo "Palworld server stopped."
 }
 
@@ -60,16 +60,16 @@ trap 'echo "Script terminated."; exit 0' SIGTERM SIGINT
 
 # Main loop
 while true; do
-    # Wait for the restart interval
-    sleep $RESTART_INTERVAL &
-    wait $!
+    next_restart=$(date -d "+ $RESTART_INTERVAL seconds" +"%Y-%m-%d %H:%M:%S")
+    echo "Next restart scheduled at: $next_restart"
+    
+    sleep $((RESTART_INTERVAL - RESTART_WARNING_TIME))
     
     # Send warning notification before restart
-    send_discord_notification "The Palworld server will restart in $(($RESTART_WARNING_TIME / 60)) minutes!"
+    warning_minutes=$((RESTART_WARNING_TIME / 60))
+    send_discord_notification "The Palworld server will restart in $warning_minutes minutes!"
     
-    # Wait for the warning period
-    sleep $RESTART_WARNING_TIME &
-    wait $!
+    sleep $RESTART_WARNING_TIME
     
     restart_server
 done
